@@ -9,32 +9,34 @@ import (
 	"strconv"
 )
 
-type Stats interface {
-	Step(float64)
-	Result() float64
-}
-
-type Mean struct {
-	sum   float64
+type Tally struct {
 	count int
+	sum   float64
+	min   float64
+	max   float64
 }
 
-func NewMean() *Mean               { return &Mean{} }
-func (m *Mean) Step(value float64) { m.sum += value; m.count++ }
-func (m *Mean) Result() float64    { return m.sum / float64(m.count) }
+func NewTally() Tally {
+	return Tally{
+		count: 0,
+		sum:   0,
+		min:   math.MaxFloat64,
+		max:   0, // should be min float?
+	}
+}
 
-type Min struct{ min float64 }
+func (t *Tally) Step(v float64) {
+	t.count += 1
+	t.sum += v
+	t.min = math.Min(t.min, v)
+	t.max = math.Max(t.max, v)
+}
 
-func NewMin() *Min                { return &Min{math.MaxFloat64} }
-func (m *Min) Step(value float64) { m.min = math.Min(m.min, value) }
-func (m *Min) Result() float64    { return m.min }
+func (t *Tally) Average() float64 { return t.sum / float64(t.count) }
+func (t *Tally) Min() float64     { return t.min }
+func (t *Tally) Max() float64     { return t.max }
 
-type Max struct{ max float64 }
-
-func NewMax() *Max                { return &Max{0} }
-func (m *Max) Step(value float64) { m.max = math.Max(m.max, value) }
-func (m *Max) Result() float64    { return m.max }
-
+// Scans for line-separated floats
 type FloatScanner struct {
 	scanner *bufio.Scanner
 	value   float64
@@ -60,20 +62,22 @@ func (f *FloatScanner) Value() float64 {
 	return f.value
 }
 
-func main() {
-	stats := map[string]Stats{
-		"Average": NewMean(),
-		"Max":     NewMax(),
-		"Min":     NewMin(),
+func PrintSummary(w io.Writer, s map[string]float64) {
+	for name, stat := range s {
+		fmt.Printf("%-7s %g\n", name, stat)
 	}
+}
+
+func main() {
+	tally := NewTally()
 
 	for scanner := NewFloatScanner(os.Stdin); scanner.Scan(); {
-		for _, s := range stats {
-			s.Step(scanner.Value())
-		}
+		tally.Step(scanner.Value())
 	}
 
-	for name, s := range stats {
-		fmt.Printf("%-7s %g\n", name, s.Result())
-	}
+	PrintSummary(os.Stdout, map[string]float64{
+		"Average": tally.Average(),
+		"Max":     tally.Max(),
+		"Min":     tally.Min(),
+	})
 }
